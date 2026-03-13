@@ -1,0 +1,1771 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>KSONG Editor v3</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Outfit:wght@300;400;500;600;700&display=swap');
+:root {
+  --bg: #0e0e12;
+  --panel: #141418;
+  --panel2: #1a1a20;
+  --border: rgba(255,255,255,0.06);
+  --border2: rgba(255,255,255,0.12);
+  --accent: #4f8eff;
+  --accent2: #ff4f8e;
+  --green: #3fffa0;
+  --yellow: #ffc947;
+  --purple: #a855f7;
+  --text: #dddaf0;
+  --muted: rgba(221,218,240,0.38);
+  --mono: 'DM Mono', monospace;
+  --ui: 'Outfit', sans-serif;
+  /* piano roll colors */
+  --note-color: #4f8eff;
+  --note-hover: #6fa5ff;
+  --black-key: #1a1a22;
+  --white-key: #2a2a34;
+  --grid-beat: rgba(255,255,255,0.07);
+  --grid-bar: rgba(255,255,255,0.14);
+  --playhead: #ff4f8e;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);font-family:var(--ui);}
+
+/* ── Start Screen ── */
+.start-screen {
+  position: fixed; inset: 0; z-index: 200;
+  background: var(--bg);
+  display: flex; align-items: center; justify-content: center;
+  flex-direction: column; gap: 0;
+}
+.start-screen.hidden { display: none; }
+.start-inner {
+  display: flex; flex-direction: column; align-items: center;
+  gap: 32px; max-width: 560px; width: 100%; padding: 0 20px;
+}
+.start-logo {
+  text-align: center;
+}
+.start-logo h1 {
+  font-size: 2.4rem; font-weight: 700; letter-spacing: .04em; color: var(--text);
+  line-height: 1;
+}
+.start-logo h1 span { color: var(--accent); }
+.start-logo p { font-size: .8rem; color: var(--muted); margin-top: 6px; letter-spacing: .1em; }
+.start-cards {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 14px; width: 100%;
+}
+.start-card {
+  background: var(--panel); border: 1px solid var(--border2);
+  border-radius: 12px; padding: 24px 20px; cursor: pointer;
+  transition: all .18s; text-align: center; display: flex;
+  flex-direction: column; align-items: center; gap: 10px;
+}
+.start-card:hover { border-color: var(--accent); background: rgba(79,142,255,.07); transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,0,0,.4); }
+.start-card.open-card:hover { border-color: var(--green); background: rgba(63,255,160,.05); }
+.start-card-ico { font-size: 2.2rem; }
+.start-card-title { font-size: .95rem; font-weight: 600; color: var(--text); }
+.start-card-sub { font-size: .72rem; color: var(--muted); line-height: 1.5; }
+/* drop area on start screen */
+.start-drop-area {
+  width: 100%; border: 2px dashed rgba(63,255,160,.25); border-radius: 10px;
+  padding: 16px; text-align: center; transition: all .18s;
+  font-size: .75rem; color: var(--muted);
+}
+.start-drop-area.drag { border-color: var(--green); background: rgba(63,255,160,.05); color: var(--green); }
+.start-hint { font-size: .68rem; color: rgba(221,218,240,.2); letter-spacing: .08em; }
+
+/* ── App Shell ── */
+.app {
+  display: grid;
+  grid-template-rows: 48px 1fr;
+  height: 100vh;
+}
+
+/* ── Topbar ── */
+.topbar {
+  display: flex; align-items: center; gap: 8px;
+  padding: 0 14px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+  user-select: none;
+}
+.logo { font-size: .95rem; font-weight: 700; letter-spacing: .04em; color: var(--text); display: flex; align-items: center; gap: 8px; }
+.logo-badge { font-size: .55rem; font-family: var(--mono); background: var(--accent); color: #fff; padding: 1px 5px; border-radius: 3px; letter-spacing: .06em; }
+.tb-sep { width: 1px; height: 20px; background: var(--border2); margin: 0 2px; }
+.tb-sp { flex: 1; }
+/* toolbar buttons */
+.tbtn { height: 28px; padding: 0 10px; border-radius: 5px; border: 1px solid var(--border2); background: transparent; color: var(--text); font-family: var(--ui); font-size: .72rem; cursor: pointer; display: flex; align-items: center; gap: 4px; transition: background .12s, border-color .12s; white-space: nowrap; }
+.tbtn:hover { background: rgba(255,255,255,.06); border-color: rgba(255,255,255,.2); }
+.tbtn.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+.tbtn.primary:hover { background: #6fa5ff; }
+.tbtn.danger { background: rgba(255,79,142,.12); border-color: rgba(255,79,142,.3); color: var(--accent2); }
+.tbtn.danger:hover { background: rgba(255,79,142,.22); }
+.tbtn.active { background: rgba(79,142,255,.16); border-color: var(--accent); color: var(--accent); }
+/* transport */
+.transport { display: flex; align-items: center; gap: 6px; }
+.ttime { font-family: var(--mono); font-size: .82rem; color: var(--yellow); text-shadow: 0 0 10px rgba(255,201,71,.4); min-width: 58px; text-align: center; background: rgba(255,201,71,.06); border: 1px solid rgba(255,201,71,.15); border-radius: 4px; padding: 2px 7px; }
+.tbtn-play { width: 32px; height: 28px; border-radius: 5px; border: none; background: var(--accent2); color: #fff; cursor: pointer; font-size: .85rem; display: flex; align-items: center; justify-content: center; transition: all .12s; }
+.tbtn-play:hover { transform: scale(1.06); }
+/* speed control */
+.speed-control { display: flex; align-items: center; gap: 4px; background: rgba(79,142,255,.08); border: 1px solid rgba(79,142,255,.2); border-radius: 4px; padding: 0 4px; }
+.speed-btn { width: 24px; height: 24px; border: none; background: transparent; color: var(--accent); cursor: pointer; font-size: .9rem; display: flex; align-items: center; justify-content: center; transition: all .1s; border-radius: 3px; }
+.speed-btn:hover { background: rgba(79,142,255,.2); }
+.speed-display { font-family: var(--mono); font-size: .72rem; color: var(--accent); min-width: 36px; text-align: center; white-space: nowrap; }
+/* status */
+.sb { font-family: var(--mono); font-size: .66rem; color: var(--muted); }
+
+/* ── Main body: horizontal split ── */
+.main-body {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  overflow: hidden;
+}
+
+/* ── Left sidebar ── */
+.sidebar {
+  background: var(--panel);
+  border-right: 1px solid var(--border);
+  display: flex; flex-direction: column;
+  overflow: hidden;
+}
+.sb-tabs { display: flex; border-bottom: 1px solid var(--border); }
+.sb-tab { flex: 1; height: 34px; border: none; background: transparent; color: var(--muted); font-family: var(--ui); font-size: .72rem; cursor: pointer; border-bottom: 2px solid transparent; transition: all .14s; }
+.sb-tab.active { color: var(--accent); border-bottom-color: var(--accent); background: rgba(79,142,255,.05); }
+.sb-body { flex: 1; overflow-y: auto; padding: 12px; }
+.sb-body::-webkit-scrollbar { width: 3px; }
+.sb-body::-webkit-scrollbar-thumb { background: rgba(255,255,255,.08); border-radius: 99px; }
+
+/* fields */
+.fld { margin-bottom: 9px; }
+.fld label { font-size: .62rem; color: var(--muted); letter-spacing: .08em; display: block; margin-bottom: 3px; text-transform: uppercase; }
+.fld input, .fld select {
+  width: 100%; background: var(--bg); border: 1px solid var(--border2);
+  border-radius: 5px; color: var(--text); font-family: var(--ui); font-size: .78rem;
+  padding: 5px 8px; outline: none; transition: border-color .13s;
+}
+.fld input:focus, .fld select:focus { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(79,142,255,.14); }
+.frow { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+
+/* audio drop */
+.adrop {
+  border: 1px dashed rgba(79,142,255,.28); border-radius: 8px; padding: 11px 10px;
+  text-align: center; cursor: pointer; margin-bottom: 10px; transition: all .16s;
+}
+.adrop:hover { border-color: var(--accent); background: rgba(79,142,255,.05); }
+.adrop.has { border-color: var(--green); background: rgba(63,255,160,.04); }
+.adrop-ico { font-size: 1.4rem; }
+.adrop-txt { font-size: .68rem; color: var(--muted); margin-top: 2px; }
+.adrop-name { font-size: .7rem; color: var(--green); font-weight: 600; margin-top: 3px; }
+.ap { display: none; margin-bottom: 9px; }
+.ap audio { width: 100%; border-radius: 4px; }
+
+/* MV section */
+.mv-section { margin-bottom: 10px; }
+.mv-drop {
+  border: 1px dashed rgba(255,79,142,.28); border-radius: 8px;
+  padding: 14px 10px; text-align: center; cursor: pointer;
+  transition: all .16s; min-height: 80px; position: relative; overflow: hidden;
+  background: rgba(255,79,142,.03);
+}
+.mv-drop:hover { border-color: var(--accent2); background: rgba(255,79,142,.07); }
+.mv-drop.has { border-color: var(--accent2); padding: 0; cursor: default; }
+.mv-drop.has #mv-drop-inner { display: none; }
+.mv-drop.drag { border-color: var(--accent2); background: rgba(255,79,142,.1); }
+
+/* midi drop */
+.mdrop {
+  border: 1px dashed rgba(168,85,247,.28); border-radius: 8px; padding: 11px 10px;
+  text-align: center; cursor: pointer; margin-bottom: 10px; transition: all .16s;
+}
+.mdrop:hover { border-color: var(--purple); background: rgba(168,85,247,.05); }
+.mdrop.has { border-color: var(--purple); background: rgba(168,85,247,.07); }
+.mdrop-name { font-size: .7rem; color: var(--purple); font-weight: 600; margin-top: 3px; }
+.midi-chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+.midi-chip { font-family: var(--mono); font-size: .6rem; padding: 1px 5px; border-radius: 3px; background: rgba(168,85,247,.15); color: var(--purple); border: 1px solid rgba(168,85,247,.25); }
+
+/* lyric list */
+.lyric-list { display: flex; flex-direction: column; gap: 2px; }
+.lyric-item {
+  display: flex; align-items: center; gap: 5px;
+  padding: 4px 5px; border-radius: 5px; border: 1px solid transparent;
+  cursor: pointer; transition: all .12s; position: relative;
+}
+.lyric-item:hover { background: rgba(255,255,255,.04); border-color: var(--border2); }
+.lyric-item.active { background: rgba(79,142,255,.1); border-color: rgba(79,142,255,.3); }
+.lyric-item.playing { background: rgba(255,201,71,.07); border-color: rgba(255,201,71,.25); }
+.li-time {
+  font-family: var(--mono); font-size: .65rem; color: var(--yellow);
+  background: rgba(255,201,71,.08); border: 1px solid rgba(255,201,71,.18);
+  border-radius: 3px; padding: 1px 5px; min-width: 48px; text-align: center;
+  cursor: pointer; transition: all .12s;
+}
+.li-time:hover { border-color: var(--yellow); }
+.li-text { flex: 1; font-size: .78rem; color: var(--text); background: transparent; border: none; outline: none; font-family: var(--ui); padding: 0; }
+.li-text::placeholder { color: var(--muted); }
+.li-del { width: 18px; height: 18px; border: none; border-radius: 3px; background: rgba(255,79,142,.1); color: var(--accent2); cursor: pointer; font-size: .6rem; display: flex; align-items: center; justify-content: center; opacity: 0; transition: opacity .12s; flex-shrink: 0; }
+.lyric-item:hover .li-del { opacity: 1; }
+.add-lyric-btn {
+  width: 100%; height: 28px; margin-top: 4px;
+  border: 1px dashed rgba(79,142,255,.2); border-radius: 5px;
+  background: transparent; color: var(--accent); cursor: pointer; font-size: .72rem;
+  transition: all .13s;
+}
+.add-lyric-btn:hover { background: rgba(79,142,255,.06); border-color: var(--accent); }
+/* stamp hint */
+.stamp-hint {
+  background: rgba(255,201,71,.06); border: 1px solid rgba(255,201,71,.15);
+  border-radius: 6px; padding: 7px 9px; font-size: .66rem; color: rgba(255,201,71,.7);
+  margin-bottom: 9px; line-height: 1.5;
+}
+.stamp-hint kbd { background: rgba(255,201,71,.15); border: 1px solid rgba(255,201,71,.3); border-radius: 3px; padding: 0 4px; font-family: var(--mono); }
+
+/* ── Center: Piano Roll + Waveform ── */
+.center { display: flex; flex-direction: column; overflow: hidden; background: var(--bg); }
+
+/* waveform strip */
+.waveform-strip {
+  height: 52px; flex-shrink: 0; position: relative; border-bottom: 1px solid var(--border);
+  background: var(--panel2); overflow: hidden; cursor: pointer;
+}
+#wv-canvas { display: block; width: 100%; height: 100%; }
+.wv-playhead {
+  position: absolute; top: 0; bottom: 0; width: 2px;
+  background: var(--playhead); box-shadow: 0 0 6px var(--playhead);
+  pointer-events: none; transform: translateX(0);
+  transition: transform 0.05s linear;
+}
+.wv-label {
+  position: absolute; top: 4px; left: 8px;
+  font-family: var(--mono); font-size: .58rem; color: rgba(255,255,255,.25);
+  letter-spacing: .12em; text-transform: uppercase; pointer-events: none;
+}
+
+/* Piano roll toolbar */
+.pr-toolbar {
+  height: 34px; flex-shrink: 0; display: flex; align-items: center; gap: 7px;
+  padding: 0 12px; background: var(--panel); border-bottom: 1px solid var(--border);
+}
+.pr-tool-group { display: flex; align-items: center; gap: 4px; }
+.pr-tool { width: 28px; height: 24px; border-radius: 4px; border: 1px solid var(--border2); background: transparent; color: var(--muted); cursor: pointer; font-size: .75rem; display: flex; align-items: center; justify-content: center; transition: all .12s; }
+.pr-tool:hover { background: rgba(255,255,255,.06); color: var(--text); }
+.pr-tool.active { background: rgba(79,142,255,.16); border-color: var(--accent); color: var(--accent); }
+.pr-sep { width: 1px; height: 18px; background: var(--border); }
+.pr-label { font-size: .65rem; color: var(--muted); font-family: var(--mono); }
+.pr-snap-sel {
+  height: 24px; padding: 0 7px; border-radius: 4px; border: 1px solid var(--border2);
+  background: var(--bg); color: var(--text); font-family: var(--mono); font-size: .65rem;
+  cursor: pointer; outline: none;
+}
+.pr-zoom { display: flex; align-items: center; gap: 3px; margin-left: auto; }
+.zoom-btn { width: 22px; height: 22px; border-radius: 4px; border: 1px solid var(--border2); background: transparent; color: var(--muted); cursor: pointer; font-size: .8rem; display: flex; align-items: center; justify-content: center; }
+.zoom-btn:hover { background: rgba(255,255,255,.06); color: var(--text); }
+.zoom-val { font-family: var(--mono); font-size: .62rem; color: var(--muted); min-width: 32px; text-align: center; }
+/* keyboard shortcut hint */
+.pr-hint { font-size: .6rem; color: rgba(255,255,255,.2); }
+.pr-hint kbd { font-family: var(--mono); background: rgba(255,255,255,.07); border-radius: 2px; padding: 0 3px; }
+
+/* Piano roll main */
+.pr-main {
+  flex: 1; display: flex; overflow: hidden; position: relative;
+}
+/* Piano keyboard */
+.piano-keys {
+  width: 42px; flex-shrink: 0; position: relative; overflow: hidden;
+  background: var(--black-key); border-right: 1px solid rgba(255,255,255,.1);
+  user-select: none;
+}
+#keys-canvas { display: block; width: 42px; }
+
+/* Piano roll canvas area */
+.pr-scroll {
+  flex: 1; overflow: auto; position: relative; cursor: crosshair;
+}
+.pr-scroll::-webkit-scrollbar { width: 8px; height: 8px; }
+.pr-scroll::-webkit-scrollbar-track { background: var(--panel); }
+.pr-scroll::-webkit-scrollbar-thumb { background: rgba(255,255,255,.12); border-radius: 4px; }
+#roll-canvas { display: block; cursor: crosshair; }
+
+/* Playhead overlay - deprecated, now drawn on canvas */
+
+/* ── Tooltip ── */
+.tooltip {
+  position: fixed; background: var(--panel2); border: 1px solid var(--border2);
+  border-radius: 5px; padding: 4px 8px; font-size: .68rem; font-family: var(--mono);
+  color: var(--text); pointer-events: none; z-index: 100; white-space: nowrap;
+  box-shadow: 0 4px 12px rgba(0,0,0,.5); display: none;
+}
+
+/* ── ベロシティレーン ── */
+.vel-lane {
+  height: 68px; flex-shrink: 0; display: flex;
+  border-top: 1px solid var(--border); background: var(--panel2);
+}
+.vel-lane-key {
+  width: 42px; flex-shrink: 0; background: var(--black-key);
+  border-right: 1px solid rgba(255,255,255,.1);
+  display: flex; align-items: center; justify-content: center;
+}
+.vel-lane-key::after {
+  content: 'VEL'; font-size: .52rem; font-family: var(--mono);
+  color: var(--muted); writing-mode: vertical-rl; letter-spacing: .1em;
+}
+.vel-scroll-wrap {
+  flex: 1; overflow-x: auto; overflow-y: hidden; position: relative;
+}
+.vel-scroll-wrap::-webkit-scrollbar { height: 4px; }
+.vel-scroll-wrap::-webkit-scrollbar-thumb { background: rgba(255,255,255,.1); border-radius: 2px; }
+#vel-canvas { display: block; cursor: ns-resize; }
+
+/* マイク録音ボタン */
+#mic-rec-btn.recording {
+  background: rgba(255,79,142,.18); border-color: var(--accent2); color: var(--accent2);
+  animation: recpulse .7s ease-in-out infinite;
+}
+@keyframes recpulse { 0%,100%{box-shadow:0 0 0 0 rgba(255,79,142,.4)} 50%{box-shadow:0 0 0 6px rgba(255,79,142,0)} }
+
+/* ── Toast ── */
+.toast {
+  position: fixed; bottom: 16px; right: 16px;
+  background: var(--panel2); border: 1px solid var(--border2);
+  border-radius: 7px; padding: 8px 14px; font-size: .73rem;
+  transform: translateY(50px) scale(.95); opacity: 0;
+  transition: all .2s ease; z-index: 999; pointer-events: none;
+}
+.toast.show { transform: translateY(0) scale(1); opacity: 1; }
+.toast.ok { border-color: var(--green); }
+.toast.info { border-color: var(--accent); }
+.toast.err { border-color: var(--accent2); color: var(--accent2); }
+
+/* context menu */
+.ctx-menu {
+  position: fixed; background: var(--panel2); border: 1px solid var(--border2);
+  border-radius: 7px; padding: 4px; z-index: 200; min-width: 140px;
+  box-shadow: 0 8px 24px rgba(0,0,0,.6); display: none;
+}
+.ctx-item {
+  display: flex; align-items: center; gap: 7px;
+  padding: 5px 10px; border-radius: 4px; cursor: pointer;
+  font-size: .74rem; transition: background .1s;
+}
+.ctx-item:hover { background: rgba(255,255,255,.07); }
+.ctx-item.danger { color: var(--accent2); }
+.ctx-item.danger:hover { background: rgba(255,79,142,.1); }
+.ctx-sep { height: 1px; background: var(--border); margin: 3px 6px; }
+</style>
+</head>
+<body>
+
+<!-- ── Start Screen ── -->
+<div class="start-screen" id="start-screen">
+  <div class="start-inner">
+    <div class="start-logo">
+      <h1>KSONG <span>EDITOR</span></h1>
+      <p>v3 · .ksong カラオケ制作ツール</p>
+    </div>
+    <div class="start-cards">
+      <div class="start-card" onclick="startNew()">
+        <div class="start-card-ico">✨</div>
+        <div class="start-card-title">新規プロジェクト</div>
+        <div class="start-card-sub">新しい曲を<br>ゼロから作成</div>
+      </div>
+      <div class="start-card open-card" onclick="document.getElementById('open-start').click()">
+        <div class="start-card-ico">📂</div>
+        <div class="start-card-title">.ksong を開く</div>
+        <div class="start-card-sub">既存ファイルを<br>読み込んで編集</div>
+        <input type="file" id="open-start" accept=".ksong" style="display:none" onchange="openKsongFromStart(event)">
+      </div>
+    </div>
+    <div class="start-drop-area" id="start-drop">
+      .ksong ファイルをここにドロップして開く
+    </div>
+    <div class="start-hint">または下の「開く」ボタンでMIDI・音源ファイルを個別に読み込めます</div>
+  </div>
+</div>
+
+<div class="app" style="display:none" id="app-shell">
+<!-- ── Topbar ── -->
+<div class="topbar">
+  <div class="logo">KSONG EDITOR <span class="logo-badge">v3</span></div>
+  <div class="tb-sep"></div>
+  <div class="transport">
+    <button class="tbtn-play" id="tbtn-play" onclick="tlToggle()" title="Space">▶</button>
+    <div class="ttime" id="ttime">0:00.00</div>
+    <div class="speed-control">
+      <button class="speed-btn" onclick="decreaseSpeed()" title="速度-">−</button>
+      <span class="speed-display" id="speed-display">1.0x</span>
+      <button class="speed-btn" onclick="increaseSpeed()" title="速度+">＋</button>
+    </div>
+  </div>
+  <div class="tb-sep"></div>
+  <button class="tbtn" onclick="newProject()">＋ 新規</button>
+  <button class="tbtn" onclick="document.getElementById('open-in').click()">📂 開く</button>
+  <input type="file" id="open-in" accept=".ksong" style="display:none" onchange="openKsong(event)">
+  <button class="tbtn" style="color:var(--purple);border-color:rgba(168,85,247,.3)" onclick="document.getElementById('midi-in').click()">🎹 MIDIインポート</button>
+  <input type="file" id="midi-in" accept=".mid,.midi" style="display:none" onchange="importMidi(event)">
+  <div class="tb-sp"></div>
+  <div class="sb" id="sb">未保存</div>
+  <button class="tbtn primary" onclick="exportKsong()">💾 .ksong 書き出し</button>
+</div>
+
+<!-- ── Main ── -->
+<div class="main-body">
+
+  <!-- Left sidebar -->
+  <div class="sidebar">
+    <div class="sb-tabs">
+      <button class="sb-tab active" id="tab-meta" onclick="switchTab('meta')">📋 メタ</button>
+      <button class="sb-tab" id="tab-lyrics" onclick="switchTab('lyrics')">🎤 歌詞</button>
+    </div>
+
+    <!-- Meta tab -->
+    <div class="sb-body" id="body-meta">
+      <div class="adrop" id="adrop" onclick="document.getElementById('audio-in').click()">
+        <div class="adrop-ico">🎵</div>
+        <div class="adrop-txt">音源をドロップ / クリック</div>
+        <div class="adrop-name" id="adrop-name">MP3 · WAV · OGG · M4A · FLAC · WebM</div>
+      </div>
+      <input type="file" id="audio-in" accept="audio/*" onchange="loadAudio(event)" style="display:none">
+      <div class="ap" id="ap"><audio id="aud" controls></audio></div>
+
+      <div class="mdrop" id="mdrop" onclick="document.getElementById('midi-in').click()">
+        <div class="adrop-ico">🎹</div>
+        <div class="adrop-txt">MIDIをドロップ / クリック<br><span style="font-size:.6rem">.mid → ピアノロールに自動配置</span></div>
+        <div class="mdrop-name" id="mdrop-name">MIDI · .mid</div>
+        <div class="midi-chips" id="midi-chips"></div>
+      </div>
+
+      <div class="fld"><label>曲タイトル</label><input id="m-title" placeholder="例: 桜色舞うころ" oninput="upd()"></div>
+      <div class="fld"><label>アーティスト</label><input id="m-artist" placeholder="例: 中島美嘉" oninput="upd()"></div>
+      <div class="frow">
+        <div class="fld"><label>BPM</label><input id="m-bpm" type="number" value="120" min="30" max="300" oninput="upd();drawRoll()"></div>
+        <div class="fld"><label>キー</label>
+          <select id="m-key" onchange="upd()">
+            <option>C</option><option>C#</option><option>D</option><option>D#</option>
+            <option>E</option><option>F</option><option>F#</option><option>G</option>
+            <option>G#</option><option>A</option><option>A#</option><option>B</option>
+          </select>
+        </div>
+      </div>
+      <div class="frow">
+        <div class="fld"><label>絵文字</label><input id="m-emoji" value="🎵" maxlength="4" oninput="upd()"></div>
+        <div class="fld"><label>作成者</label><input id="m-creator" oninput="upd()"></div>
+      </div>
+      <div class="fld"><label>アルバム</label><input id="m-album" oninput="upd()"></div>
+
+      <!-- MV 動画アップロード -->
+      <div class="mv-section">
+        <div class="mv-drop" id="mv-drop" onclick="document.getElementById('mv-file-in').click()">
+          <div id="mv-drop-inner">
+            <div class="adrop-ico">🎬</div>
+            <div class="adrop-txt">MV動画をドロップ / クリック</div>
+            <div class="adrop-name" id="mv-drop-name">MP4 · MOV · WebM</div>
+          </div>
+          <!-- プレビュー（読込後に表示） -->
+          <video id="mv-preview-vid" style="display:none;width:100%;height:100%;object-fit:cover;border-radius:7px;" muted playsinline></video>
+        </div>
+        <input type="file" id="mv-file-in" accept="video/*" onchange="loadMVFile(event)" style="display:none">
+        <div id="mv-info-row" style="display:none;align-items:center;gap:7px;margin-top:6px;">
+          <div style="flex:1;min-width:0;">
+            <div id="mv-file-name" style="font-size:.7rem;color:var(--green);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"></div>
+            <div id="mv-file-size" style="font-family:var(--mono);font-size:.58rem;color:var(--muted);"></div>
+          </div>
+          <button onclick="playPauseMVPreview()" id="mv-play-btn"
+            style="height:24px;padding:0 8px;border-radius:4px;border:1px solid rgba(63,255,160,.3);background:rgba(63,255,160,.07);color:var(--green);cursor:pointer;font-size:.68rem;flex-shrink:0;">▶ 再生</button>
+          <button onclick="clearMVFile()"
+            style="height:24px;padding:0 8px;border-radius:4px;border:1px solid rgba(255,79,142,.3);background:rgba(255,79,142,.08);color:var(--accent2);cursor:pointer;font-size:.68rem;flex-shrink:0;">✕ 削除</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Lyrics tab -->
+    <div class="sb-body" id="body-lyrics" style="display:none">
+      <div class="stamp-hint">
+        <kbd>Space</kbd> 再生/停止　　<kbd>L</kbd> 歌詞スタンプ<br>
+        再生しながら <kbd>L</kbd> で現在位置に追加
+      </div>
+      <div class="lyric-list" id="lyric-list"></div>
+      <button class="add-lyric-btn" onclick="addLyric(getCT(),'')">＋ 歌詞を追加</button>
+    </div>
+  </div>
+
+  <!-- Center: waveform + piano roll -->
+  <div class="center">
+
+    <!-- Waveform strip -->
+    <div class="waveform-strip" id="wv-strip">
+      <div class="wv-label">WAVEFORM</div>
+      <canvas id="wv-canvas"></canvas>
+      <div class="wv-playhead" id="wv-ph"></div>
+    </div>
+
+    <!-- Piano roll toolbar -->
+    <div class="pr-toolbar">
+      <div class="pr-tool-group">
+        <button class="pr-tool active" id="tool-draw" onclick="setTool('draw')" title="ペン: クリックでノート追加 (D)">✏️</button>
+        <button class="pr-tool" id="tool-select" onclick="setTool('select')" title="選択 (S)">⬜</button>
+        <button class="pr-tool" id="tool-erase" onclick="setTool('erase')" title="消しゴム (E)">🗑</button>
+      </div>
+      <div class="pr-sep"></div>
+      <span class="pr-label">スナップ</span>
+      <select class="pr-snap-sel" id="snap-sel" onchange="snapChange()">
+        <option value="1">1/1</option>
+        <option value="2">1/2</option>
+        <option value="4" selected>1/4</option>
+        <option value="8">1/8</option>
+        <option value="16">1/16</option>
+        <option value="0">なし</option>
+      </select>
+      <div class="pr-sep"></div>
+      <button class="tbtn" id="mic-rec-btn" onclick="toggleMicRec()" title="マイクで音程を録音してノートを自動生成" style="gap:4px;">
+        <span id="mic-rec-ico">🎤</span><span id="mic-rec-lbl">録音</span>
+      </button>
+      <div class="pr-sep"></div>
+      <button class="tbtn" onclick="deleteBlockNotes()" title="表示範囲内のノートを削除">🗑️ ブロック削除</button>
+      <div class="pr-sep"></div>
+      <span class="pr-hint"><kbd>D</kbd>ペン <kbd>S</kbd>選択 <kbd>E</kbd>消しゴム <kbd>Del</kbd>削除 <kbd>Ctrl+Z</kbd>元に戻す</span>
+      <div class="pr-zoom">
+        <button class="zoom-btn" onclick="zoomOut()">−</button>
+        <span class="zoom-val" id="zoom-val">100%</span>
+        <button class="zoom-btn" onclick="zoomIn()">＋</button>
+        <button class="zoom-btn" onclick="zoomFit()" title="全体表示" style="font-size:.6rem">⊡</button>
+      </div>
+    </div>
+
+    <!-- Piano roll -->
+    <div class="pr-main" id="pr-main">
+      <div class="piano-keys" id="piano-keys">
+        <canvas id="keys-canvas"></canvas>
+      </div>
+      <div class="pr-scroll" id="pr-scroll">
+        <canvas id="roll-canvas"></canvas>
+        <!-- Playhead overlay (DOM-based for smooth movement) -->
+        <div id="ph-overlay" style="position:absolute;top:0;bottom:0;width:2px;background:rgba(255,79,142,.9);box-shadow:0 0 8px rgba(255,79,142,.9);pointer-events:none;z-index:10;display:none;transition:none;"></div>
+      </div>
+    </div>
+
+    <!-- ベロシティレーン -->
+    <div class="vel-lane" id="vel-lane">
+      <div class="vel-lane-key"></div>
+      <div class="vel-scroll-wrap" id="vel-scroll-wrap">
+        <canvas id="vel-canvas" height="64"></canvas>
+      </div>
+    </div>
+  </div>
+
+</div><!-- main-body -->
+</div><!-- app-shell -->
+
+<!-- Tooltip -->
+<div class="tooltip" id="tooltip"></div>
+
+<!-- Context menu -->
+<div class="ctx-menu" id="ctx-menu">
+  <div class="ctx-item" id="ctx-set-lyric">🎤 この位置に歌詞スタンプ</div>
+  <div class="ctx-sep"></div>
+  <div class="ctx-item" id="ctx-note-props">🎹 ノートを編集</div>
+  <div class="ctx-sep"></div>
+  <div class="ctx-item danger" id="ctx-del-note">🗑 ノートを削除</div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<script>
+// ════════════════════════════════════════════════
+// Start Screen
+// ════════════════════════════════════════════════
+function showStartScreen(){
+  document.getElementById('start-screen').classList.remove('hidden');
+  document.getElementById('app-shell').style.display='none';
+}
+function hideStartScreen(){
+  document.getElementById('start-screen').classList.add('hidden');
+  document.getElementById('app-shell').style.display='grid';
+}
+function startNew(){
+  hideStartScreen();
+  // clear any sample notes for clean slate
+  notes=[];lyrics=[];selectedNotes.clear();undoStack=[];
+  renderLyrics();upd();setupCanvases();drawWaveform();
+  toast('✨ 新規プロジェクトを開始','ok');
+}
+async function openKsongFromStart(e){
+  await openKsong(e);
+  hideStartScreen();
+}
+// Start screen drag & drop
+(function(){
+  const drop=document.getElementById('start-drop');
+  drop.addEventListener('dragover',e=>{e.preventDefault();drop.classList.add('drag');});
+  drop.addEventListener('dragleave',()=>drop.classList.remove('drag'));
+  drop.addEventListener('drop',async e=>{
+    e.preventDefault();drop.classList.remove('drag');
+    const f=e.dataTransfer.files[0];
+    if(f&&f.name.endsWith('.ksong')){
+      await openKsong({target:{files:[f]}});
+      hideStartScreen();
+    }
+  });
+  drop.addEventListener('click',()=>document.getElementById('open-start').click());
+})();
+
+// ════════════════════════════════════════════════
+// MIDI Utils
+// ════════════════════════════════════════════════
+const NNAMES=['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+const m2n=n=>NNAMES[n%12]+(Math.floor(n/12)-1);
+const m2hz=n=>440*Math.pow(2,(n-69)/12);
+function name2midi(s){const m=s.trim().toUpperCase().match(/^([A-G]#?)(-?\d+)$/);if(!m)return 60;const i=NNAMES.indexOf(m[1]);return i<0?60:i+(parseInt(m[2])+1)*12;}
+
+// ════════════════════════════════════════════════
+// MIDI File Parser
+// ════════════════════════════════════════════════
+function parseMidiFile(buf){
+  const dv=new DataView(buf);let p=0;
+  const u32=()=>{const v=dv.getUint32(p,false);p+=4;return v;};
+  const u16=()=>{const v=dv.getUint16(p,false);p+=2;return v;};
+  const u8=()=>dv.getUint8(p++);
+  const vl=()=>{let v=0,b;do{b=u8();v=(v<<7)|(b&0x7f);}while(b&0x80);return v;};
+  if(u32()!==0x4D546864)throw new Error('MIDIヘッダー不正');
+  u32();u16();const nT=u16(),div=u16();
+  const tracks=[];
+  for(let t=0;t<nT;t++){
+    if(u32()!==0x4D54726B)break;
+    const tl=u32(),te=p+tl;const evts=[];let tick=0,ls=0;
+    while(p<te){
+      tick+=vl();let sb=u8();
+      if(sb&0x80)ls=sb;else{p--;sb=ls;}
+      const tp=sb&0xF0;
+      if(tp===0x90){const n=u8(),v=u8();evts.push({tick,type:v>0?'on':'off',note:n,vel:v});}
+      else if(tp===0x80){const n=u8();u8();evts.push({tick,type:'off',note:n});}
+      else if(tp===0xA0||tp===0xB0||tp===0xE0){u8();u8();}
+      else if(tp===0xC0||tp===0xD0){u8();}
+      else if(sb===0xFF){const mt=u8(),ml=vl();if(mt===0x51&&ml===3){const a=u8(),b2=u8(),c=u8();evts.push({tick,type:'tempo',uspb:(a<<16)|(b2<<8)|c});}else p+=ml;}
+      else if(sb===0xF0||sb===0xF7){p+=vl();}
+    }
+    p=te;tracks.push(evts);
+  }
+  const tmap=[];
+  tracks.forEach(evts=>evts.forEach(e=>{if(e.type==='tempo')tmap.push({tick:e.tick,uspb:e.uspb});}));
+  tmap.sort((a,b)=>a.tick-b.tick);
+  function t2s(tick){let s=0,pt=0,pu=500000;for(const tm of tmap){if(tm.tick>=tick)break;s+=(Math.min(tm.tick,tick)-pt)*pu/div/1e6;pt=tm.tick;pu=tm.uspb;}return s+(tick-pt)*pu/div/1e6;}
+  const pend={};const all=[];
+  tracks.forEach(evts=>evts.forEach(e=>all.push(e)));
+  all.sort((a,b)=>a.tick-b.tick);
+  const notes=[];
+  all.forEach(e=>{
+    const k=e.note;
+    if(e.type==='on'){pend[k]={tick:e.tick,vel:e.vel};}
+    else if(e.type==='off'&&pend[k]){
+      const o=pend[k];const ts=t2s(o.tick),te2=t2s(e.tick);
+      notes.push({t:+ts.toFixed(3),midiNote:k,note:m2n(k),freq:+m2hz(k).toFixed(2),velocity:o.vel,duration:+Math.max(0.05,te2-ts).toFixed(3)});
+      delete pend[k];
+    }
+  });
+  let bpm=120;
+  tracks.forEach(evts=>evts.forEach(e=>{if(e.type==='tempo')bpm=Math.round(60e6/e.uspb);}));
+  return{notes:notes.sort((a,b)=>a.t-b.t),bpm};
+}
+
+// ════════════════════════════════════════════════
+// State
+// ════════════════════════════════════════════════
+let audioBlob=null,audioMime='audio/mpeg',audioUrl=null;
+let audioCtxDecode=null,waveformData=null;
+// Notes: {id, t(sec), midiNote, note, freq, velocity, duration, selected}
+let notes=[];
+let lyrics=[];  // {id, t, text}
+let noteIdC=0, lyricIdC=0;
+let undoStack=[];
+
+// Piano roll view
+let PRW=1, PRH_NOTE=16; // pixels per second, pixels per note row
+let TOTAL_NOTES=88; // 88 keys
+let MIN_NOTE=21; // A0
+let MAX_NOTE=108; // C8
+let zoom=1;
+let scrollX=0, scrollY=0;
+
+// tools
+let currentTool='draw'; // draw | select | erase
+let snapDiv=4; // snap to 1/snapDiv note
+let isDrawing=false, drawStart=null, drawNote=null;
+let isDragging=false, dragNotes=[], dragStartX=0;
+let isResizing=false, resizeNote=null, resizeStartX=0;
+let selectedNotes=new Set();
+let ctxMenuNote=null;
+let isPlaying=false;
+let playTime=0, playStartTs=null;
+let isSeekingPlayhead=false;
+let playbackRate=1.0; // speed control (0.1 - 1.0)
+
+// ════════════════════════════════════════════════
+// Canvas setup
+// ════════════════════════════════════════════════
+const rollCanvas=document.getElementById('roll-canvas');
+const rollCtx=rollCanvas.getContext('2d');
+const keysCanvas=document.getElementById('keys-canvas');
+const keysCtx=keysCanvas.getContext('2d');
+const wvCanvas=document.getElementById('wv-canvas');
+const wvCtx=wvCanvas.getContext('2d');
+
+function getPixPerSec(){return 120*zoom;}
+function getRowH(){return Math.max(8, PRH_NOTE);}
+
+function totalDuration(){
+  const aud=document.getElementById('aud');
+  if(aud.duration&&isFinite(aud.duration))return aud.duration;
+  if(notes.length)return Math.max(...notes.map(n=>n.t+n.duration))+4;
+  return 60;
+}
+
+function setupCanvases(){
+  const scroll=document.getElementById('pr-scroll');
+  const dur=totalDuration();
+  const pps=getPixPerSec();
+  const rh=getRowH();
+  rollCanvas.width=Math.max(scroll.clientWidth||800, dur*pps+200);
+  rollCanvas.height=TOTAL_NOTES*rh;
+  keysCanvas.width=42;
+  keysCanvas.height=TOTAL_NOTES*rh;
+  document.getElementById('piano-keys').style.height=rollCanvas.height+'px';
+  drawKeys();
+  drawRoll();
+}
+
+// ════════════════════════════════════════════════
+// Draw Piano Keys
+// ════════════════════════════════════════════════
+function drawKeys(){
+  const ctx=keysCtx;
+  const rh=getRowH();
+  const W=42,H=TOTAL_NOTES*rh;
+  ctx.clearRect(0,0,W,H);
+  const blacks=new Set([1,3,6,8,10]);
+  const scrollTop=document.getElementById('pr-scroll').scrollTop;
+  for(let i=0;i<TOTAL_NOTES;i++){
+    const midiN=MAX_NOTE-i;
+    const y=i*rh-scrollTop;
+    const isB=blacks.has(midiN%12);
+    // Key bg
+    ctx.fillStyle=isB?'#1c1c26':'#2a2a38';
+    ctx.fillRect(0,y,42,rh);
+    ctx.strokeStyle='rgba(0,0,0,.3)';ctx.lineWidth=1;
+    ctx.strokeRect(0,y,42,rh);
+    // White key accent
+    if(!isB&&rh>=10){
+      ctx.fillStyle='rgba(255,255,255,.05)';
+      ctx.fillRect(0,y,4,rh);
+    }
+    // Note label (C notes and every 12)
+    if(midiN%12===0&&rh>=8){
+      ctx.fillStyle='rgba(255,255,255,.4)';
+      ctx.font=`${Math.min(9,rh-2)}px DM Mono,monospace`;
+      ctx.textAlign='right';
+      ctx.fillText(m2n(midiN),40,y+rh-3);
+    }
+    // Black key accent
+    if(isB){
+      ctx.fillStyle='rgba(255,255,255,.04)';
+      ctx.fillRect(0,y,28,rh);
+    }
+  }
+  // sync scroll
+  document.getElementById('piano-keys').scrollTop=document.getElementById('pr-scroll').scrollTop;
+}
+
+// ════════════════════════════════════════════════
+// Draw Piano Roll
+// ════════════════════════════════════════════════
+function drawRoll(){
+  const ctx=rollCtx;
+  const pps=getPixPerSec();
+  const rh=getRowH();
+  const W=rollCanvas.width, H=rollCanvas.height;
+  const bpm=parseInt(document.getElementById('m-bpm').value)||120;
+  const secPerBeat=60/bpm;
+  const blacks=new Set([1,3,6,8,10]);
+
+  ctx.clearRect(0,0,W,H);
+
+  // ─ Row backgrounds ─
+  for(let i=0;i<TOTAL_NOTES;i++){
+    const midiN=MAX_NOTE-i;
+    const y=i*rh;
+    const isB=blacks.has(midiN%12);
+    ctx.fillStyle=isB?'rgba(0,0,0,.35)':'rgba(255,255,255,.015)';
+    ctx.fillRect(0,y,W,rh);
+    // Octave C line
+    if(midiN%12===0){
+      ctx.strokeStyle='rgba(255,255,255,.1)';ctx.lineWidth=1;
+      ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke();
+    }
+  }
+
+  // ─ Waveform background ─
+  if(waveformData&&waveformData.length>0){
+    const aud=document.getElementById('aud');
+    const dur=aud.duration&&isFinite(aud.duration)?aud.duration:60;
+    ctx.save();
+    ctx.globalAlpha=0.08;
+    ctx.fillStyle='#4f8eff';
+    const step=W/waveformData.length;
+    for(let i=0;i<waveformData.length;i++){
+      const x=i*step;
+      const amp=waveformData[i]*H*0.5;
+      ctx.fillRect(x,H/2-amp,step,amp*2);
+    }
+    ctx.restore();
+  }
+
+  // ─ Beat / bar grid ─
+  const totalBeats=totalDuration()/secPerBeat;
+  for(let b=0;b<=totalBeats+1;b++){
+    const x=b*secPerBeat*pps;
+    const isBar=b%4===0;
+    ctx.strokeStyle=isBar?'rgba(255,255,255,.12)':'rgba(255,255,255,.04)';
+    ctx.lineWidth=isBar?1.5:0.8;
+    ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke();
+    // beat label
+    if(isBar&&rh>=6){
+      ctx.fillStyle='rgba(255,255,255,.25)';
+      ctx.font='9px DM Mono,monospace';
+      ctx.textAlign='left';
+      ctx.fillText(Math.floor(b/4+1)+':1',x+2,10);
+    }
+    // sub-beat lines
+    if(snapDiv>=8){
+      const sub=secPerBeat/snapDiv*4;
+      for(let s=1;s<snapDiv/4;s++){
+        const sx=x+s*sub*pps;
+        if(sx>W)break;
+        ctx.strokeStyle='rgba(255,255,255,.02)';ctx.lineWidth=0.5;
+        ctx.beginPath();ctx.moveTo(sx,0);ctx.lineTo(sx,H);ctx.stroke();
+      }
+    }
+  }
+
+  // ─ Notes ─
+  notes.forEach(n=>{
+    const row=MAX_NOTE-n.midiNote;
+    if(row<0||row>=TOTAL_NOTES)return;
+    const x=n.t*pps;
+    const y=row*rh;
+    const w=Math.max(4,n.duration*pps);
+    const sel=selectedNotes.has(n.id);
+    const alpha=0.5+n.velocity/127*0.5;
+
+    // Shadow
+    ctx.shadowColor=sel?'rgba(255,201,71,.6)':'rgba(79,142,255,.5)';
+    ctx.shadowBlur=sel?8:4;
+
+    // Body
+    const grad=ctx.createLinearGradient(x,y,x,y+rh);
+    grad.addColorStop(0,sel?`rgba(255,201,71,${alpha})`:`rgba(99,162,255,${alpha})`);
+    grad.addColorStop(1,sel?`rgba(255,150,50,${alpha*.7})`:`rgba(60,100,220,${alpha*.7})`);
+    ctx.fillStyle=grad;
+    ctx.beginPath();ctx.roundRect(x+1,y+1,w-2,rh-2,3);ctx.fill();
+    ctx.shadowBlur=0;
+
+    // Top highlight
+    ctx.fillStyle=`rgba(255,255,255,${alpha*.35})`;
+    ctx.fillRect(x+1,y+1,w-2,2);
+
+    // Resize handle (right edge)
+    ctx.fillStyle=`rgba(255,255,255,${alpha*.5})`;
+    ctx.fillRect(x+w-5,y+1,4,rh-2);
+
+    // Note label
+    if(w>24&&rh>=10){
+      ctx.fillStyle='rgba(255,255,255,.85)';
+      ctx.font=`bold ${Math.min(9,rh-2)}px DM Mono,monospace`;
+      ctx.textAlign='left';
+      ctx.fillText(n.note,x+3,y+rh-3);
+    }
+  });
+  const t5=performance.now();
+
+  // ─ Lyrics markers ─
+  lyrics.forEach(l=>{
+    const x=l.t*pps;
+    ctx.strokeStyle='rgba(255,201,71,.6)';ctx.lineWidth=1.5;ctx.setLineDash([3,3]);
+    ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke();ctx.setLineDash([]);
+    ctx.fillStyle='rgba(255,201,71,.8)';
+    ctx.font='9px DM Mono,monospace';ctx.textAlign='left';
+    // text bg
+    const tw=ctx.measureText(l.text||'…').width+6;
+    ctx.fillStyle='rgba(255,201,71,.15)';ctx.fillRect(x,12,tw,13);
+    ctx.fillStyle='rgba(255,201,71,.9)';
+    ctx.fillText(l.text||'…',x+2,23);
+  });
+  const t6=performance.now();
+
+  // ─ Playhead (now drawn as separate DOM element, not here) ─
+  // See: updatePlayheadPosition() function
+}
+
+// ════════════════════════════════════════════════
+// Draw Waveform
+// ════════════════════════════════════════════════
+function drawWaveform(){
+  const strip=document.getElementById('wv-strip');
+  // キャンバスサイズを動的に変更（リサイズ時のみ更新）
+  const newW=strip.clientWidth||800;
+  const newH=strip.clientHeight||52;
+  if(wvCanvas.width!==newW||wvCanvas.height!==newH){
+    wvCanvas.width=newW;
+    wvCanvas.height=newH;
+  }
+  const W=wvCanvas.width,H=wvCanvas.height;
+  const ctx=wvCtx;
+  const t0=performance.now();
+  ctx.clearRect(0,0,W,H);
+  const t1=performance.now();
+  if(!waveformData){
+    ctx.fillStyle='rgba(255,255,255,.05)';ctx.fillRect(0,H/2-1,W,2);
+    return;
+  }
+  const step=W/waveformData.length;
+  const grad=ctx.createLinearGradient(0,0,W,0);
+  grad.addColorStop(0,'rgba(79,142,255,.6)');grad.addColorStop(1,'rgba(255,79,142,.6)');
+  ctx.fillStyle=grad;
+  for(let i=0;i<waveformData.length;i++){
+    const x=i*step,amp=waveformData[i]*H*.45;
+    ctx.fillRect(x,H/2-amp,Math.max(1,step),amp*2);
+  }
+  // playhead
+  if(isPlaying||playTime>0){
+    const pps=getPixPerSec();
+    const dur=totalDuration();
+    const px=(playTime/dur)*W;
+    document.getElementById('wv-ph').style.transform=`translateX(${px}px)`;
+  }
+}
+
+// ════════════════════════════════════════════════
+// Audio loading & waveform decode
+// ════════════════════════════════════════════════
+// Audio format support
+const SUPPORTED_AUDIO_FORMATS={
+  'mp3':'audio/mpeg',
+  'wav':'audio/wav',
+  'ogg':'audio/ogg',
+  'oga':'audio/ogg',
+  'm4a':'audio/mp4',
+  'mp4':'audio/mp4',
+  'aac':'audio/aac',
+  'flac':'audio/flac',
+  'weba':'audio/webm',
+  'webm':'audio/webm',
+  'opus':'audio/opus',
+  'wma':'audio/x-ms-wma',
+};
+
+function getMimeTypeFromFile(file){
+  if(file.type)return file.type;
+  const nameMatch=file.name.match(/\.([a-z0-9]+)$/i);
+  const ext=nameMatch?nameMatch[1].toLowerCase():null;
+  return SUPPORTED_AUDIO_FORMATS[ext]||'audio/mpeg';
+}
+
+function isAudioFile(file){
+  if(file.type&&file.type.startsWith('audio/'))return true;
+  const nameMatch=file.name.match(/\.([a-z0-9]+)$/i);
+  const ext=nameMatch?nameMatch[1].toLowerCase():null;
+  return ext&&SUPPORTED_AUDIO_FORMATS[ext]?true:false;
+}
+
+function loadAudio(e){
+  const f=e.target.files[0];if(!f)return;
+  if(!isAudioFile(f)){
+    toast('❌ サポートされていないオーディオフォーマットです','error');
+    return;
+  }
+  audioMime=getMimeTypeFromFile(f);
+  audioBlob=f;
+  if(audioUrl)URL.revokeObjectURL(audioUrl);
+  audioUrl=URL.createObjectURL(f);
+  const a=document.getElementById('aud');
+  a.src=audioUrl;
+  a.playbackRate=playbackRate;
+  document.getElementById('ap').style.display='block';
+  document.getElementById('adrop').classList.add('has');
+  document.getElementById('adrop-name').textContent=f.name;
+  a.ontimeupdate=()=>{
+    if(!isPlaying)return;
+    playTime=a.currentTime;
+  };
+  a.onloadedmetadata=()=>{upd();setupCanvases();};
+  // decode waveform
+  const reader=new FileReader();
+  reader.onload=ev=>{
+    const actx=new(window.AudioContext||window.webkitAudioContext)();
+    actx.decodeAudioData(ev.target.result,buf=>{
+      const ch=buf.getChannelData(0);
+      const bins=600;const step=Math.floor(ch.length/bins);
+      waveformData=[];
+      for(let i=0;i<bins;i++){let max=0;for(let j=0;j<step;j++)max=Math.max(max,Math.abs(ch[i*step+j]));waveformData.push(max);}
+      drawWaveform();drawRoll();
+    });
+  };
+  reader.readAsArrayBuffer(f);
+  toast('✅ 音源を読み込みました','ok');
+}
+
+// Drag & drop setup
+function setupDropZone(elId,check,cb){
+  const el=document.getElementById(elId);
+  el.ondragover=e=>{e.preventDefault();el.style.opacity='.7';};
+  el.ondragleave=()=>el.style.opacity='';
+  el.ondrop=e=>{e.preventDefault();el.style.opacity='';const f=e.dataTransfer.files[0];if(f&&check(f))cb(f);};
+}
+setupDropZone('adrop',f=>isAudioFile(f),f=>loadAudio({target:{files:[f]}}));
+setupDropZone('mdrop',f=>f.name.match(/\.midi?$/i),f=>importMidi({target:{files:[f]}}));
+
+// Waveform strip mouse events for seeking
+let isSeekingWaveform=false;
+document.getElementById('wv-strip').addEventListener('mousedown',e=>{
+  isSeekingWaveform=true;
+  updateWaveformSeek(e);
+});
+document.addEventListener('mousemove',e=>{
+  if(isSeekingWaveform)updateWaveformSeek(e);
+});
+document.addEventListener('mouseup',()=>{
+  isSeekingWaveform=false;
+});
+function updateWaveformSeek(e){
+  const wvStrip=document.getElementById('wv-strip');
+  const r=wvStrip.getBoundingClientRect();
+  const p=Math.max(0,Math.min(1,(e.clientX-r.left)/r.width));
+  const dur=totalDuration();
+  const newPlayTime=p*dur;
+  // playTime が実際に変わった場合のみ更新
+  if(Math.abs(newPlayTime-playTime)>0.001){
+    playTime=newPlayTime;
+    lastPlayTime=playTime;
+    const a=document.getElementById('aud');
+    if(a.src)a.currentTime=playTime;
+    drawRoll();
+    drawWaveform();
+    updatePlayheadPosition();
+    updatePlayheadUI();
+  }
+}
+
+// ════════════════════════════════════════════════
+// MIDI Import
+// ════════════════════════════════════════════════
+async function importMidi(e){
+  const f=e.target.files[0];if(!f)return;
+  try{
+    const buf=await f.arrayBuffer();
+    const{notes:mn,bpm}=parseMidiFile(buf);
+    document.getElementById('m-bpm').value=bpm;
+    const nc={};mn.forEach(n=>{const k=NNAMES[n.midiNote%12];nc[k]=(nc[k]||0)+1;});
+    const tk=Object.entries(nc).sort((a,b)=>b[1]-a[1])[0]?.[0]||'C';
+    if(NNAMES.includes(tk))document.getElementById('m-key').value=tk;
+    // add notes
+    saveUndo();
+    mn.forEach(n=>{notes.push({...n,id:noteIdC++,selected:false});});
+    document.getElementById('mdrop').classList.add('has');
+    document.getElementById('mdrop-name').textContent=f.name;
+    // chips
+    const chips=document.getElementById('midi-chips');chips.innerHTML='';
+    const used=[...new Set(mn.map(n=>NNAMES[n.midiNote%12]))];
+    used.forEach(k=>{const c=document.createElement('div');c.className='midi-chip';c.textContent=k;chips.appendChild(c);});
+    setupCanvases();upd();
+    toast(`✅ MIDI: ${mn.length}ノート · BPM ${bpm}`,'info');
+  }catch(err){toast('⚠️ '+err.message,'err');console.error(err);}
+}
+
+// ════════════════════════════════════════════════
+// Playback
+// ════════════════════════════════════════════════
+function tlToggle(){
+  const a=document.getElementById('aud');
+  if(a.src){
+    if(a.paused){a.currentTime=playTime;a.playbackRate=playbackRate;a.play();isPlaying=true;startPlaybackLoop();}
+    else{a.pause();isPlaying=false;stopPlaybackLoop();}
+  }else{
+    // no audio: demo tick
+    isPlaying=!isPlaying;
+    if(isPlaying){
+      const start=performance.now()-playTime*1000;
+      clearInterval(window._demoIv);
+      window._demoIv=setInterval(()=>{
+        if(!isPlaying){clearInterval(window._demoIv);return;}
+        playTime=(performance.now()-start)/1000;
+      },50);
+      startPlaybackLoop();
+    }else{clearInterval(window._demoIv);stopPlaybackLoop();}
+  }
+  document.getElementById('tbtn-play').textContent=isPlaying?'⏸':'▶';
+}
+
+// Speed control
+function updateSpeedDisplay(){
+  document.getElementById('speed-display').textContent = playbackRate.toFixed(2) + 'x';
+  const audio = document.getElementById('aud');
+  if(audio && audio.src) audio.playbackRate = playbackRate;
+}
+
+function increaseSpeed(){
+  playbackRate = Math.min(1.0, playbackRate + 0.05);
+  updateSpeedDisplay();
+}
+
+function decreaseSpeed(){
+  playbackRate = Math.max(0.1, playbackRate - 0.05);
+  updateSpeedDisplay();
+}
+
+let playbackLoopId=null;
+let lastDrawTime=0;
+let lastUIUpdateTime=0;
+let lastPlayTime=-1; // Playhead 位置キャッシュ
+const TARGET_FPS=60;
+const FRAME_TIME=1000/TARGET_FPS; // ~16.67ms
+const UI_UPDATE_INTERVAL=100; // UI更新は100ms間隔
+let drawCallCount=0;
+function startPlaybackLoop(){
+  if(playbackLoopId)return;
+  const now=performance.now();
+  lastDrawTime=now;
+  lastUIUpdateTime=now;
+  lastPlayTime=-1;
+  drawCallCount=0;
+  console.log('[DEBUG] Playback loop started (60 FPS fixed)');
+  // Fix to 60 FPS using setInterval instead of requestAnimationFrame
+  playbackLoopId=setInterval(()=>playbackLoop(performance.now()), FRAME_TIME);
+}
+function stopPlaybackLoop(){シークが
+  if(playbackLoopId){
+    clearInterval(playbackLoopId);
+    playbackLoopId=null;
+    console.log(`[DEBUG] Playback stopped. Canvas draws: ${drawCallCount}, Total frames: ~${Math.round(performance.now()/FRAME_TIME)}`);
+  }
+}
+function playbackLoop(currentTime){
+  if(!isPlaying){stopPlaybackLoop();return;}
+  // playTime が実際に変わった場合のみ描画
+  if(Math.abs(playTime-lastPlayTime)>0.001){
+    lastPlayTime=playTime;
+    drawCallCount++;
+    updatePlayheadCanvas();
+  }
+  // UI更新は100ms間隔
+  if(currentTime-lastUIUpdateTime>=UI_UPDATE_INTERVAL){
+    lastUIUpdateTime=currentTime;
+    updatePlayheadUI();
+  }
+}
+
+function updatePlayheadCanvas(){
+  // キャンバス描画のみ（毎フレーム実行）
+  drawRoll();
+  drawWaveform();
+  // playhead 位置を DOM で更新
+  updatePlayheadPosition();
+}
+
+function updatePlayheadPosition(){
+  // playhead DOM 要素の位置を更新（軽量操作）
+  const pps=getPixPerSec();
+  const px=playTime*pps;
+  const scroll=document.getElementById('pr-scroll');
+  const phOverlay=document.getElementById('ph-overlay');
+  if(phOverlay){
+    phOverlay.style.display=isPlaying||playTime>0?'block':'none';
+    // scroll adjusted position
+    phOverlay.style.left=(px-scroll.scrollLeft)+'px';
+  }
+}
+
+function updatePlayheadUI(){
+  // DOM操作のみ（100ms間隔）
+  const pps=getPixPerSec();
+  const px=playTime*pps;
+  const scroll=document.getElementById('pr-scroll');
+  // auto-scroll
+  if(isPlaying&&(px-scroll.scrollLeft>scroll.clientWidth*.8||px-scroll.scrollLeft<0)){
+    scroll.scrollLeft=px-scroll.clientWidth*.2;
+  }
+  const m=Math.floor(playTime/60),s=(playTime%60);
+  document.getElementById('ttime').textContent=m+':'+(s<10?'0':'')+s.toFixed(2);
+  // lyric highlight
+  let li=-1;for(let i=lyrics.length-1;i>=0;i--){if(playTime>=lyrics[i].t){li=i;break;}}
+  document.querySelectorAll('.lyric-item').forEach((el,i)=>{
+    el.classList.toggle('playing',i===li);
+  });
+}
+
+function getCT(){
+  const a=document.getElementById('aud');
+  return a.src?a.currentTime:playTime;
+}
+
+// ════════════════════════════════════════════════
+// Tool management
+// ════════════════════════════════════════════════
+function setTool(t){
+  currentTool=t;
+  ['draw','select','erase'].forEach(n=>{
+    document.getElementById('tool-'+n).classList.toggle('active',n===t);
+  });
+  rollCanvas.style.cursor=t==='erase'?'cell':t==='select'?'default':'crosshair';
+}
+
+function snapChange(){
+  const v=document.getElementById('snap-sel').value;
+  snapDiv=parseInt(v)||0;
+}
+
+function applySnap(t){
+  if(!snapDiv)return t;
+  const bpm=parseInt(document.getElementById('m-bpm').value)||120;
+  const snapSec=(60/bpm)/(snapDiv/4);
+  return Math.round(t/snapSec)*snapSec;
+}
+
+// ════════════════════════════════════════════════
+// Piano Roll Mouse Events
+// ════════════════════════════════════════════════
+function rollXYtoNote(x,y){
+  const pps=getPixPerSec();const rh=getRowH();
+  const t=x/pps;
+  const row=Math.floor(y/rh);
+  const midiN=MAX_NOTE-row;
+  return{t,midiN,row};
+}
+
+function noteAt(x,y){
+  const pps=getPixPerSec();const rh=getRowH();
+  return notes.find(n=>{
+    const nx=n.t*pps,ny=(MAX_NOTE-n.midiNote)*rh;
+    const nw=Math.max(4,n.duration*pps);
+    return x>=nx&&x<=nx+nw&&y>=ny&&y<=ny+rh;
+  });
+}
+
+function isOnResizeHandle(n,x){
+  const pps=getPixPerSec();
+  const nx=n.t*pps,nw=Math.max(4,n.duration*pps);
+  return x>=nx+nw-8&&x<=nx+nw;
+}
+
+rollCanvas.addEventListener('mousedown',e=>{
+  const scrollElem=document.getElementById('pr-scroll');
+  const scrollRect=scrollElem.getBoundingClientRect();
+  const x=e.clientX-scrollRect.left+scrollElem.scrollLeft;
+  const y=e.clientY-scrollRect.top+scrollElem.scrollTop;
+  const pps=getPixPerSec();
+  const px=playTime*pps;
+
+  // Check if clicking on playhead (within 10px)
+  if(Math.abs(x-px)<=10&&e.button===0){
+    isSeekingPlayhead=true;
+    updatePlayheadSeek(x);
+    return;
+  }
+
+  if(e.button===2){
+    // right click → context menu
+    const n=noteAt(x,y);ctxMenuNote=n||null;
+    showCtxMenu(e.clientX,e.clientY,n);
+    return;
+  }
+
+  if(currentTool==='erase'){
+    const n=noteAt(x,y);
+    if(n){saveUndo();notes=notes.filter(nn=>nn.id!==n.id);selectedNotes.delete(n.id);drawRoll();}
+    return;
+  }
+
+  if(currentTool==='select'){
+    const n=noteAt(x,y);
+    if(n){
+      if(!e.shiftKey)selectedNotes.clear();
+      selectedNotes.add(n.id);
+      isDragging=true;dragStartX=x;
+      dragNotes=notes.filter(nn=>selectedNotes.has(nn.id)).map(nn=>({id:nn.id,origT:nn.t}));
+    }else{selectedNotes.clear();}
+    drawRoll();return;
+  }
+
+  // draw tool
+  const n=noteAt(x,y);
+  if(n&&isOnResizeHandle(n,x)){
+    saveUndo();isResizing=true;resizeNote=n;resizeStartX=x;
+    return;
+  }
+  if(n){
+    // click existing note → select & drag
+    if(!e.shiftKey)selectedNotes.clear();
+    selectedNotes.add(n.id);isDragging=true;dragStartX=x;
+    dragNotes=notes.filter(nn=>selectedNotes.has(nn.id)).map(nn=>({id:nn.id,origT:nn.t}));
+    drawRoll();return;
+  }
+  // add new note
+  const{t:rawT,midiN}=rollXYtoNote(x,y);
+  if(midiN<MIN_NOTE||midiN>MAX_NOTE)return;
+  const t=applySnap(rawT);
+  const bpm=parseInt(document.getElementById('m-bpm').value)||120;
+  const dur=applySnap(60/bpm);
+  saveUndo();
+  const newNote={id:noteIdC++,t:Math.max(0,t),midiNote:midiN,note:m2n(midiN),freq:+m2hz(midiN).toFixed(2),velocity:100,duration:Math.max(0.05,dur),selected:false};
+  notes.push(newNote);
+  isDrawing=true;drawStart=x;drawNote=newNote;
+  selectedNotes.clear();selectedNotes.add(newNote.id);
+  upd();drawRoll();
+});
+
+rollCanvas.addEventListener('mousemove',e=>{
+  const scrollElem=document.getElementById('pr-scroll');
+  const scrollRect=scrollElem.getBoundingClientRect();
+  const x=e.clientX-scrollRect.left+scrollElem.scrollLeft;
+  const y=e.clientY-scrollRect.top+scrollElem.scrollTop;
+  const pps=getPixPerSec();
+
+  // tooltip
+  const n=noteAt(x,y);
+  if(n){
+    const tt=document.getElementById('tooltip');
+    tt.style.display='block';
+    tt.style.left=(e.clientX+12)+'px';tt.style.top=(e.clientY-4)+'px';
+    tt.textContent=`${n.note} (MIDI:${n.midiNote}) · ${n.t.toFixed(2)}s · ${n.duration.toFixed(2)}s · vel:${n.velocity}`;
+    rollCanvas.style.cursor=isOnResizeHandle(n,x)?'ew-resize':'grab';
+  }else{
+    document.getElementById('tooltip').style.display='none';
+    rollCanvas.style.cursor=currentTool==='erase'?'cell':currentTool==='select'?'default':'crosshair';
+  }
+
+  if(isDrawing&&drawNote){
+    const newDur=applySnap(Math.max(0.05,(x-drawStart)/pps));
+    drawNote.duration=newDur;
+    drawRoll();
+  }
+  if(isResizing&&resizeNote){
+    const dx=(x-resizeStartX)/pps;
+    resizeNote.duration=Math.max(0.05,resizeNote.duration+dx);
+    resizeStartX=x;
+    drawRoll();
+  }
+  if(isDragging&&dragNotes.length){
+    const dx=(x-dragStartX)/pps;
+    dragNotes.forEach(dn=>{
+      const n=notes.find(nn=>nn.id===dn.id);
+      if(n)n.t=Math.max(0,applySnap(dn.origT+dx));
+    });
+    drawRoll();
+  }
+  if(isSeekingPlayhead){
+    updatePlayheadSeek(x);
+  }
+});
+
+rollCanvas.addEventListener('mouseup',()=>{
+  if(isDrawing||isResizing||isDragging)upd();
+  if(isSeekingPlayhead)updatePlayheadUI();
+  isDrawing=false;drawNote=null;isResizing=false;resizeNote=null;isDragging=false;dragNotes=[];isSeekingPlayhead=false;
+});
+rollCanvas.addEventListener('mouseleave',()=>{
+  document.getElementById('tooltip').style.display='none';
+  isDrawing=false;isResizing=false;isDragging=false;
+  isSeekingPlayhead=false;
+});
+rollCanvas.addEventListener('contextmenu',e=>e.preventDefault());
+
+// Playhead (seek bar) drag function
+function updatePlayheadSeek(x){
+  const pps=getPixPerSec();
+  const newPlayTime=Math.max(0,x/pps);
+  // playTime が実際に変わった場合のみ更新
+  if(Math.abs(newPlayTime-playTime)>0.001){
+    playTime=newPlayTime;
+    lastPlayTime=playTime;
+    const a=document.getElementById('aud');
+    if(a.src)a.currentTime=playTime;
+    drawRoll();drawWaveform();
+    updatePlayheadPosition();
+    updatePlayheadUI();
+  }
+}
+
+// Scroll sync keys
+document.getElementById('pr-scroll').onscroll=e=>{
+  document.getElementById('piano-keys').scrollTop=e.target.scrollTop;
+  drawKeys();
+  drawRoll();
+  updatePlayheadPosition();
+};
+
+// ════════════════════════════════════════════════
+// Context Menu
+// ════════════════════════════════════════════════
+function showCtxMenu(x,y,note){
+  const m=document.getElementById('ctx-menu');
+  m.style.display='block';m.style.left=x+'px';m.style.top=y+'px';
+  document.getElementById('ctx-note-props').style.display=note?'flex':'none';
+  document.getElementById('ctx-del-note').style.display=note?'flex':'none';
+}
+document.getElementById('ctx-set-lyric').onclick=()=>{
+  const t=getCT();
+  addLyric(t,'');switchTab('lyrics');
+  hideCtxMenu();toast('🎤 歌詞を追加しました','ok');
+};
+document.getElementById('ctx-del-note').onclick=()=>{
+  if(ctxMenuNote){saveUndo();notes=notes.filter(n=>n.id!==ctxMenuNote.id);selectedNotes.delete(ctxMenuNote.id);upd();drawRoll();}
+  hideCtxMenu();
+};
+document.getElementById('ctx-note-props').onclick=()=>{
+  if(!ctxMenuNote)return;
+  const vel=prompt('ベロシティ (1-127):',ctxMenuNote.velocity);
+  if(vel){ctxMenuNote.velocity=Math.max(1,Math.min(127,parseInt(vel)||100));upd();drawRoll();}
+  hideCtxMenu();
+};
+function hideCtxMenu(){document.getElementById('ctx-menu').style.display='none';}
+document.addEventListener('click',()=>hideCtxMenu());
+
+// ════════════════════════════════════════════════
+// Zoom
+// ════════════════════════════════════════════════
+function zoomIn(){zoom=Math.min(8,zoom*1.4);applyZoom();}
+function zoomOut(){zoom=Math.max(.2,zoom/1.4);applyZoom();}
+function zoomFit(){
+  const scroll=document.getElementById('pr-scroll');
+  const dur=totalDuration();
+  zoom=Math.max(.2,(scroll.clientWidth-60)/(dur*120));
+  applyZoom();
+}
+function applyZoom(){
+  document.getElementById('zoom-val').textContent=Math.round(zoom*100)+'%';
+  setupCanvases();
+}
+
+// Scroll zoom with ctrl+wheel
+document.getElementById('pr-scroll').addEventListener('wheel',e=>{
+  if(e.ctrlKey){
+    e.preventDefault();
+    if(e.deltaY<0)zoomIn();else zoomOut();
+  }
+},{passive:false});
+
+// ════════════════════════════════════════════════
+// Block Delete Function
+// ════════════════════════════════════════════════
+function deleteBlockNotes(){
+  const scroll=document.getElementById('pr-scroll');
+  const pps=getPixPerSec();
+  const rh=getRowH();
+  
+  // 表示範囲を計算
+  const scrollLeft=scroll.scrollLeft;
+  const scrollTop=scroll.scrollTop;
+  const scrollWidth=scroll.clientWidth;
+  const scrollHeight=scroll.clientHeight;
+  
+  const tStart=scrollLeft/pps;
+  const tEnd=(scrollLeft+scrollWidth)/pps;
+  const rowStart=Math.floor(scrollTop/rh);
+  const rowEnd=Math.floor((scrollTop+scrollHeight)/rh)+1;
+  const midiStart=MAX_NOTE-rowEnd;
+  const midiEnd=MAX_NOTE-rowStart;
+  
+  // 表示範囲内のノートを検出
+  const toDelete=notes.filter(n=>{
+    const inTime=n.t+n.duration>=tStart&&n.t<=tEnd;
+    const inPitch=n.midiNote>=midiStart&&n.midiNote<=midiEnd;
+    return inTime&&inPitch;
+  });
+  
+  if(!toDelete.length){
+    toast('⚠ 削除するノートがありません','info');return;
+  }
+  
+  if(!confirm(`${toDelete.length}個のノートを削除しますか？`))return;
+  
+  saveUndo();
+  notes=notes.filter(n=>!toDelete.some(d=>d.id===n.id));
+  toDelete.forEach(n=>selectedNotes.delete(n.id));
+  upd();drawRoll();
+  toast(`✅ ${toDelete.length}個のノートを削除しました`);
+}
+
+// ════════════════════════════════════════════════
+// Lyrics
+// ════════════════════════════════════════════════
+function addLyric(t=0,text=''){
+  const id='l'+(lyricIdC++);
+  const obj={id,t:+t.toFixed(2),text};
+  lyrics.push(obj);lyrics.sort((a,b)=>a.t-b.t);
+  renderLyrics();upd();drawRoll();
+  return obj;
+}
+
+function renderLyrics(){
+  const list=document.getElementById('lyric-list');
+  list.innerHTML='';
+  lyrics.forEach((l,i)=>{
+    const item=document.createElement('div');item.className='lyric-item';item.id='li_'+l.id;
+    item.innerHTML=`
+      <div class="li-time" title="クリックで現在位置に更新" onclick="updateLyricTime('${l.id}')">${l.t.toFixed(2)}s</div>
+      <input class="li-text" value="${escH(l.text)}" placeholder="歌詞テキスト…" oninput="lyrics[${i}].text=this.value;drawRoll();upd()">
+      <button class="li-del" onclick="removeLyric('${l.id}')">✕</button>`;
+    item.onclick=e=>{if(!e.target.classList.contains('li-del')&&!e.target.classList.contains('li-text')){seekTo(l.t);}};
+    list.appendChild(item);
+  });
+}
+
+function updateLyricTime(id){
+  const t=getCT();
+  const l=lyrics.find(x=>x.id===id);if(!l)return;
+  l.t=+t.toFixed(2);
+  lyrics.sort((a,b)=>a.t-b.t);
+  renderLyrics();drawRoll();
+  toast(`⏱ t=${t.toFixed(2)}s に更新`,'ok');
+}
+
+function removeLyric(id){
+  lyrics=lyrics.filter(l=>l.id!==id);
+  renderLyrics();drawRoll();upd();
+}
+
+function seekTo(t){
+  playTime=t;const a=document.getElementById('aud');
+  if(a.src)a.currentTime=t;
+  updatePlayheadCanvas();
+  updatePlayheadUI();
+}
+
+// ════════════════════════════════════════════════
+// Keyboard shortcuts
+// ════════════════════════════════════════════════
+document.addEventListener('keydown',e=>{
+  if(e.target.tagName==='INPUT'||e.target.tagName==='TEXTAREA')return;
+  if(e.key===' '){e.preventDefault();tlToggle();}
+  else if(e.key==='l'||e.key==='L'){e.preventDefault();addLyric(getCT(),'');switchTab('lyrics');toast('🎤 歌詞スタンプ','ok');}
+  else if(e.key==='d'||e.key==='D'){setTool('draw');}
+  else if(e.key==='s'||e.key==='S'){setTool('select');}
+  else if(e.key==='e'||e.key==='E'){setTool('erase');}
+  else if((e.key==='Delete'||e.key==='Backspace')&&selectedNotes.size){
+    e.preventDefault();saveUndo();
+    notes=notes.filter(n=>!selectedNotes.has(n.id));
+    selectedNotes.clear();upd();drawRoll();
+  }
+  else if(e.ctrlKey&&e.key==='z'){e.preventDefault();undo();}
+  else if(e.ctrlKey&&e.key==='s'){e.preventDefault();exportKsong();}
+  else if(e.ctrlKey&&e.key==='a'){e.preventDefault();notes.forEach(n=>selectedNotes.add(n.id));drawRoll();}
+});
+
+// ════════════════════════════════════════════════
+// Undo
+// ════════════════════════════════════════════════
+function saveUndo(){undoStack.push(JSON.stringify(notes));if(undoStack.length>50)undoStack.shift();}
+function undo(){if(!undoStack.length)return;notes=JSON.parse(undoStack.pop());selectedNotes.clear();upd();drawRoll();toast('↩ 元に戻しました');}
+
+// ════════════════════════════════════════════════
+// Data collect
+// ════════════════════════════════════════════════
+function collectMeta(){
+  const a=document.getElementById('aud');
+  return{ksong_version:'2.0',
+    title:document.getElementById('m-title').value||'無題',
+    artist:document.getElementById('m-artist').value||'不明',
+    album:document.getElementById('m-album').value||'',
+    bpm:parseInt(document.getElementById('m-bpm').value)||120,
+    key:document.getElementById('m-key').value,
+    duration:a.duration&&isFinite(a.duration)?+a.duration.toFixed(2):0,
+    emoji:document.getElementById('m-emoji').value||'🎵',
+    creator:document.getElementById('m-creator').value||'',
+    mv_filename:mvFilename||'',
+    created_at:new Date().toISOString()};
+}
+
+function upd(){
+  const meta=collectMeta();
+  const jsz=JSON.stringify(meta).length+JSON.stringify(lyrics).length+JSON.stringify(notes).length;
+  const asz=audioBlob?audioBlob.size:0;
+  const msz=mvBlob?mvBlob.size:0;
+  const tot=jsz+asz+msz;
+  let info=`${notes.length}ノート · ${lyrics.length}行 · ${tot>1048576?(tot/1048576).toFixed(1)+'MB':(tot/1024).toFixed(0)+'KB'}`;
+  if(mvBlob)info+=' · 🎬MV';
+  document.getElementById('sb').textContent=info;
+}
+
+// ════════════════════════════════════════════════
+// Export / Import .ksong
+// ════════════════════════════════════════════════
+async function exportKsong(){
+  const meta=collectMeta();
+  if(!meta.title||meta.title==='無題'){toast('タイトルを入力してください','err');return;}
+  if(!lyrics.length){toast('歌詞が1行もありません','err');return;}
+  try{
+    toast('⏳ 書き出し中…');
+    const zip=new JSZip();
+    zip.file('meta.json',JSON.stringify(meta,null,2));
+    zip.file('lyrics.json',JSON.stringify(lyrics.map(l=>({t:l.t,text:l.text})),null,2));
+    zip.file('midi_notes.json',JSON.stringify(notes.map(n=>({t:n.t,midiNote:n.midiNote,note:n.note,freq:n.freq,velocity:n.velocity,duration:n.duration})),null,2));
+    zip.file('pitch.json',JSON.stringify(notes.map(n=>({t:n.t,note:n.note,freq:n.freq,duration:n.duration})),null,2));
+    if(audioBlob){zip.file('audio.bin',audioBlob);zip.file('audio.mime',audioMime);}
+    if(mvBlob){zip.file('mv.bin',mvBlob);zip.file('mv.mime',mvMime);}
+    const blob=await zip.generateAsync({type:'blob',compression:'DEFLATE',compressionOptions:{level:3}});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');a.href=url;
+    a.download=(meta.title.replace(/[^\w\u3040-\u30FF\u4E00-\u9FFF]/g,'_')||'song')+'.ksong';
+    a.click();URL.revokeObjectURL(url);
+    document.getElementById('sb').textContent='保存済み: '+a.download;
+    toast('✅ 書き出しました','ok');
+  }catch(err){
+    toast('⚠️ 書き出しエラー: '+err.message,'err');
+    console.error('Export error:',err);
+  }
+}
+
+async function openKsong(e){
+  const file=e.target.files[0];if(!file)return;
+  try{
+    const zip=await JSZip.loadAsync(file);
+    const meta=JSON.parse(await zip.file('meta.json').async('string'));
+    const lyr=JSON.parse(await zip.file('lyrics.json').async('string'));
+    let mn=[];
+    const mnf=zip.file('midi_notes.json');
+    if(mnf)mn=JSON.parse(await mnf.async('string'));
+    else{const pf=zip.file('pitch.json');if(pf){const lp=JSON.parse(await pf.async('string'));mn=lp.map(p=>({t:p.t,midiNote:name2midi(p.note||'A4'),note:p.note||'A4',freq:p.freq||440,velocity:100,duration:p.duration||0.5}));}}
+    ['m-title','m-artist','m-album','m-creator'].forEach(id=>document.getElementById(id).value=meta[id.replace('m-','')]||'');
+    document.getElementById('m-bpm').value=meta.bpm||120;
+    document.getElementById('m-key').value=meta.key||'C';
+    document.getElementById('m-emoji').value=meta.emoji||'🎵';
+    notes=mn.map(n=>({...n,id:noteIdC++,selected:false}));
+    lyrics=lyr.map(l=>({...l,id:'l'+(lyricIdC++)}));
+    selectedNotes.clear();
+    const ab=zip.file('audio.bin');
+    if(ab){const am=zip.file('audio.mime');const ms=am?await am.async('string'):'audio/mpeg';const buf=await ab.async('arraybuffer');audioBlob=new Blob([buf],{type:ms});audioMime=ms;if(audioUrl)URL.revokeObjectURL(audioUrl);audioUrl=URL.createObjectURL(audioBlob);const aud=document.getElementById('aud');aud.src=audioUrl;aud.playbackRate=playbackRate;document.getElementById('ap').style.display='block';document.getElementById('adrop').classList.add('has');document.getElementById('adrop-name').textContent=meta.title+'(復元)';}
+    // MV復元
+    const mvf=zip.file('mv.bin');
+    if(mvf){
+      const mvmf=zip.file('mv.mime');const mvms=mvmf?await mvmf.async('string'):'video/mp4';
+      const mvbuf=await mvf.async('arraybuffer');
+      const fb=new File([mvbuf],meta.mv_filename||'mv'+Date.now()+'.mp4',{type:mvms});
+      applyMVFile(fb);
+    }
+    renderLyrics();upd();setupCanvases();
+    hideStartScreen();
+    toast('✅ '+file.name+' を開きました','ok');
+  }catch(err){toast('⚠️ '+err.message,'err');console.error(err);}
+}
+
+function newProject(){
+  if(!confirm('新規プロジェクトを作成しますか？'))return;
+  notes=[];lyrics=[];selectedNotes.clear();undoStack=[];audioBlob=null;waveformData=null;
+  if(audioUrl)URL.revokeObjectURL(audioUrl);audioUrl=null;
+  ['m-title','m-artist','m-album','m-creator'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('m-bpm').value=120;document.getElementById('m-emoji').value='🎵';
+  document.getElementById('adrop').classList.remove('has');document.getElementById('adrop-name').textContent='MP3 · WAV · OGG · M4A · FLAC · WebM';
+  document.getElementById('ap').style.display='none';
+  document.getElementById('mdrop').classList.remove('has');document.getElementById('mdrop-name').textContent='MIDI · .mid';
+  document.getElementById('midi-chips').innerHTML='';
+  clearMVFile();
+  renderLyrics();upd();setupCanvases();drawWaveform();
+  // 必ずエディター画面を維持
+  hideStartScreen();
+  toast('✅ 新規プロジェクト','ok');
+}
+
+// ════════════════════════════════════════════════
+// MV 動画アップロード
+// ════════════════════════════════════════════════
+let mvBlob=null, mvUrl=null, mvMime='video/mp4', mvFilename='';
+
+function loadMVFile(e){
+  const f=e.target.files[0];if(!f)return;
+  applyMVFile(f);
+}
+function applyMVFile(f){
+  if(mvUrl)URL.revokeObjectURL(mvUrl);
+  mvBlob=f;mvMime=f.type||'video/mp4';mvFilename=f.name;
+  mvUrl=URL.createObjectURL(f);
+  const vid=document.getElementById('mv-preview-vid');
+  vid.src=mvUrl;vid.style.display='block';
+  // ドロップエリアをプレビューモードに
+  document.getElementById('mv-drop').classList.add('has');
+  // info row
+  const row=document.getElementById('mv-info-row');
+  row.style.display='flex';
+  document.getElementById('mv-file-name').textContent=f.name;
+  document.getElementById('mv-file-size').textContent=
+    f.size>1048576?(f.size/1048576).toFixed(1)+' MB':(f.size/1024).toFixed(0)+' KB';
+  // ドラッグ対象をクリック無効化（再生ボタンで制御）
+  document.getElementById('mv-drop').onclick=null;
+  upd();
+  toast('🎬 MV: '+f.name+' を読み込みました','ok');
+}
+function clearMVFile(){
+  const vid=document.getElementById('mv-preview-vid');
+  vid.pause();vid.src='';vid.style.display='none';
+  if(mvUrl)URL.revokeObjectURL(mvUrl);
+  mvBlob=null;mvUrl=null;mvMime='video/mp4';mvFilename='';
+  document.getElementById('mv-drop').classList.remove('has');
+  document.getElementById('mv-drop').onclick=()=>document.getElementById('mv-file-in').click();
+  document.getElementById('mv-info-row').style.display='none';
+  document.getElementById('mv-play-btn').textContent='▶ 再生';
+  document.getElementById('mv-file-in').value='';
+  upd();toast('MV を削除しました');
+}
+function playPauseMVPreview(){
+  const vid=document.getElementById('mv-preview-vid');
+  const btn=document.getElementById('mv-play-btn');
+  if(vid.paused){vid.play();btn.textContent='⏸ 停止';}
+  else{vid.pause();btn.textContent='▶ 再生';}
+}
+// MVドロップ対応（サイドバー上へのドロップ）
+document.getElementById('mv-drop').addEventListener('dragover',e=>{e.preventDefault();document.getElementById('mv-drop').classList.add('drag');});
+document.getElementById('mv-drop').addEventListener('dragleave',()=>document.getElementById('mv-drop').classList.remove('drag'));
+document.getElementById('mv-drop').addEventListener('drop',e=>{
+  e.preventDefault();document.getElementById('mv-drop').classList.remove('drag');
+  const f=[...e.dataTransfer.files].find(f=>f.type.startsWith('video/'));
+  if(f)applyMVFile(f);
+});
+
+// Tab switch
+function switchTab(tab){
+  document.getElementById('body-meta').style.display=tab==='meta'?'':'none';
+  document.getElementById('body-lyrics').style.display=tab==='lyrics'?'':'none';
+  document.getElementById('tab-meta').classList.toggle('active',tab==='meta');
+  document.getElementById('tab-lyrics').classList.toggle('active',tab==='lyrics');
+}
+
+const escH=s=>String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
+
+// Toast
+let _tt;
+function toast(msg,type=''){
+  const el=document.getElementById('toast');el.textContent=msg;el.className='toast show'+(type?' '+type:'');
+  clearTimeout(_tt);_tt=setTimeout(()=>el.classList.remove('show'),3000);
+}
+
+// ── Init ──
+let lastCanvasCheckTime=0;
+const CANVAS_RESIZE_CHECK_INTERVAL=500; // 500ms ごとにチェック
+window.addEventListener('resize',()=>{
+  lastCanvasCheckTime=0; // 次のフレームでチェックさせる
+  setupCanvases();drawWaveform();
+});
+setupCanvases();drawWaveform();
+updateSpeedDisplay(); // Initialize speed display
+// Scroll piano roll to middle C area
+setTimeout(()=>{
+  const scroll=document.getElementById('pr-scroll');
+  const rh=getRowH();
+  const midC=MAX_NOTE-60;
+  scroll.scrollTop=Math.max(0,midC*rh-scroll.clientHeight/2);
+},100);
+// Start from start screen (no sample notes)
+// showStartScreen() is called by default since app-shell is hidden
+</script>
+</body>
+</html>
